@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EXT4 Kernel Internals & Data Flow Visualizer | BTL HUST</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="hust-badge">HUST / ĐHBK HÀ NỘI</span>
+      <h1 class="project-title">
+        EXT4 Kernel Internals & Data Flow Visualizer
+        <span>• Đề tài 16: Trích xuất Inode/Extent bằng System API</span>
+      </h1>
+    </div>
+    <div class="header-right">
+      <span class="kernel-tag">Linux 6.8+ • statx() + FS_IOC_FIEMAP</span>
+      <span class="kernel-tag" style="color: #10b981;">● Online (Ubuntu Native)</span>
+      <button id="btnShutdown" class="shutdown-btn" title="Dừng hoàn toàn tiến trình Python Server và giải phóng tài nguyên">⏹ Dừng Server</button>
+    </div>
+  </header>
+
+  <!-- Main 2-Column Layout -->
+  <main class="main-container">
+
+    <!-- CỘT 1: TERMINAL MIRROR & THAO TÁC LỆNH -->
+    <section class="left-pane">
+      
+      <!-- Bộ chọn 4 Test Cases -->
+      <div class="case-selector-bar">
+        <div class="selector-label">Chọn Kịch Bản Kiểm Thử (Ext4 Test Suite)</div>
+        <div class="case-buttons-grid">
+          
+          <button class="case-btn active" data-case="case1">
+            <span class="title">Case 1: Contiguous File</span>
+            <span class="badge-pill success">100% Liên tục (1 Extent)</span>
+          </button>
+
+          <button class="case-btn" data-case="case2">
+            <span class="title">Case 2: Sparse File</span>
+            <span class="badge-pill warning">Lỗ hổng Hole (10MB/12KB)</span>
+          </button>
+
+          <button class="case-btn" data-case="case3">
+            <span class="title">Case 3: Preallocation</span>
+            <span class="badge-pill info">fallocate UNWRITTEN</span>
+          </button>
+
+          <button class="case-btn" data-case="case4">
+            <span class="title">Case 4: Fragmented</span>
+            <span class="badge-pill danger">Phân mảnh 91.7% (12 Exts)</span>
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Thanh điều khiển mô phỏng thời gian thực -->
+      <div class="control-bar">
+        <div class="ctrl-btn-group">
+          <button id="btnPlay" class="ctrl-btn primary" title="Chạy tự động">▶ Play</button>
+          <button id="btnPause" class="ctrl-btn" title="Tạm dừng">⏸ Pause</button>
+          <button id="btnNext" class="ctrl-btn" title="Bước tiếp theo (hoặc vòng lại bước 1)">⏭ Step</button>
+          <button id="btnReset" class="ctrl-btn" title="Chạy lại từ bước 1">↺ Reset</button>
+        </div>
+        <div class="ctrl-btn-group">
+          <label for="speedSelect" style="font-size:11px; color:var(--text-muted);">Tốc độ:</label>
+          <select id="speedSelect" class="speed-select">
+            <option value="0.5">0.5x (Chậm)</option>
+            <option value="1" selected>1.0x (Chuẩn)</option>
+            <option value="2">2.0x (Nhanh)</option>
+            <option value="4">4.0x (Tức thì)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Cửa sổ Terminal Phản chiếu -->
+      <div class="terminal-wrapper">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-title">bash • thanh@bkhn-ubuntu: ~/HDH/BTL</div>
+          
+          <div class="terminal-header-right">
+            <!-- Công tắc gạt mini: Tự xuống dòng (Wrap text) -->
+            <label class="wrap-switch-container" title="Bật/Tắt tự động xuống dòng (Wrap text)">
+              <span class="wrap-switch-label">Wrap text:</span>
+              <input type="checkbox" id="termWrapToggle">
+              <span class="wrap-switch-slider"></span>
+            </label>
+
+            <button id="btnClearTerm" class="term-btn" title="Xóa màn hình">Clear</button>
+          </div>
+        </div>
+
+        <div id="terminalBody" class="terminal-body"></div>
+      </div>
+
+      <!-- Công cụ đối chứng nhanh dưới Terminal -->
+      <div class="terminal-tools">
+        <span class="tool-label">Lệnh đối chứng:</span>
+        <button id="cmdInspect" class="quick-cmd-btn">./ext4_inspect</button>
+        <button id="cmdFilefrag" class="quick-cmd-btn">filefrag -v</button>
+        <button id="cmdDebugfs" class="quick-cmd-btn">debugfs stat</button>
+      </div>
+
+    </section>
+
+    <!-- THANH KÉO CO GIÃN CHIỀU RỘNG (RESIZABLE SPLITTER GUTTER) -->
+    <div class="gutter-resizer" id="gutterResizer" title="Nhấn giữ và kéo sang trái/phải để thay đổi chiều rộng Terminal">
+      <div class="gutter-handle"></div>
+    </div>
+
+    <!-- CỘT 2: VISUAL ENGINE (ĐỒ HỌA HỆ THỐNG & DÒNG CHẢY DỮ LIỆU) -->
+    <section class="right-pane" id="rightPane">
+
+      <!-- Thanh công cụ Thu gọn / Mở rộng toàn bộ -->
+      <div class="pane-top-bar">
+        <span style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">
+          Khung Đồ Họa & Cấu Trúc Khối Đĩa
+        </span>
+        <div class="pane-view-toggle">
+          <button id="btnExpandAll" class="view-btn">▼ Mở rộng tất cả</button>
+          <button id="btnCollapseAll" class="view-btn">▲ Thu gọn tất cả</button>
+        </div>
+      </div>
+
+      <!-- PHÂN HỆ 1: Sơ đồ dòng chảy dữ liệu qua từng tầng HĐH (Pipeline Stepper) -->
+      <div class="vis-card" id="cardPipeline">
+        <div class="vis-card-header" data-toggle="cardPipeline">
+          <div class="vis-card-title">
+            <span class="card-toggle-arrow">▼</span>
+            <span>1. Data Packaging & Transit Pipeline</span>
+            <span class="tag">OS Architecture Flow</span>
+          </div>
+          <div class="header-right-tools">
+            <span id="pipelineStepBadge" class="badge-pill info">Bước 1 / 5</span>
+          </div>
+        </div>
+        <div class="vis-card-body">
+          <!-- Stepper timeline nodes -->
+          <div id="pipelineNodes" class="pipeline-stepper"></div>
+
+          <!-- Inspector box chi tiết bước hiện tại -->
+          <div class="pipeline-inspector">
+            <div class="inspector-info">
+              <h4 id="pipelineStepTitle">Đang nạp dữ liệu bước...</h4>
+              <p id="pipelineStepDesc">Mô tả chi tiết cách dữ liệu được đóng gói và chuyển giao giữa các tầng.</p>
+            </div>
+            <pre id="pipelineStepCode" class="inspector-code">// Struct & Syscall Code</pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHÂN HỆ 2: Inode 256B & Cây Extent Tree Explorer -->
+      <div class="vis-card" id="cardInode">
+        <div class="vis-card-header" data-toggle="cardInode">
+          <div class="vis-card-title">
+            <span class="card-toggle-arrow">▼</span>
+            <span>2. Cấu Trúc Inode (256 Bytes) & Cây Extent (H-Tree)</span>
+            <span class="tag">EXT4 Disk Metadata</span>
+          </div>
+          <div class="header-right-tools">
+            <span style="font-size: 10.5px; color: var(--text-muted);">statx() + FS_IOC_FIEMAP</span>
+          </div>
+        </div>
+        <div class="vis-card-body">
+          <div class="inode-extent-grid">
+            
+            <!-- Inode Field Inspector -->
+            <div class="inode-box">
+              <div class="inode-box-header">
+                <span>Cấu trúc Inode trên đĩa</span>
+                <span style="color:#10b981;">256 Bytes</span>
+              </div>
+              <table class="inode-table">
+                <tbody id="inodeTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Extent Tree Inspector -->
+            <div class="extent-tree-box">
+              <div class="inode-box-header">
+                <span>Cây Extent (i_data Root)</span>
+                <span style="color:#8b5cf6;">60 Bytes Root Node</span>
+              </div>
+              <div id="extentTreeHeader" class="tree-header-card"></div>
+              <div style="font-size:10.5px; font-weight:600; color:var(--text-muted); margin-top:2px;">
+                Danh sách Node lá (Extents Mapping):
+              </div>
+              <div id="extentTreeLeaves" class="tree-leaf-list"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- PHÂN HỆ 3: Bản đồ Khối Vật Lý trên Đĩa (Physical Disk Blocks Visualizer) -->
+      <div class="vis-card" id="cardBlocks">
+        <div class="vis-card-header" data-toggle="cardBlocks">
+          <div class="vis-card-title">
+            <span class="card-toggle-arrow">▼</span>
+            <span>3. Bản Đồ Khối Vật Lý & Quản Lý Đĩa (Block Allocation Map)</span>
+            <span class="tag">Storage Layout</span>
+          </div>
+          <div class="header-right-tools">
+            <div class="disk-legend">
+              <div class="legend-item"><span class="legend-swatch swatch-contiguous"></span> Written</div>
+              <div class="legend-item"><span class="legend-swatch swatch-sparse"></span> Hole</div>
+              <div class="legend-item"><span class="legend-swatch swatch-unwritten"></span> UNWRITTEN</div>
+              <div class="legend-item"><span class="legend-swatch swatch-fragment"></span> Gap</div>
+            </div>
+          </div>
+        </div>
+        <div class="vis-card-body">
+          <div class="disk-layout-container">
+            <div style="font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between;">
+              <span>Trục Khối Logic [LBN 0..N] ➔ Ánh xạ Khối Vật lý trên đĩa [PBN]</span>
+              <span>Rê chuột vào từng khối để xem chi tiết Sector và Offset</span>
+            </div>
+            <!-- Dải băng trực quan hóa các blocks -->
+            <div id="diskBlockStrip" class="block-strip"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHÂN HỆ 4: Bộ so sánh đối chứng Ext3 vs Ext4 ("Thiên biến vạn hóa") -->
+      <div class="vis-card" id="cardCompare">
+        <div class="vis-card-header" data-toggle="cardCompare">
+          <div class="vis-card-title">
+            <span class="card-toggle-arrow">▼</span>
+            <span>4. Đối Chứng Kiến Trúc: Ext2/Ext3 (Indirect Pointers) vs Ext4 (Extent Tree)</span>
+            <span class="tag">Comparative Analysis</span>
+          </div>
+          <div class="header-right-tools">
+            <span style="font-size:10.5px; color:#10b981;">Tối ưu I/O Metadata</span>
+          </div>
+        </div>
+        <div class="vis-card-body">
+          <div class="ext-compare-container">
+            <div id="ext3CompareCard" class="compare-card ext3"></div>
+            <div id="ext4CompareCard" class="compare-card ext4"></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Scripts -->
+  <script src="js/data.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/pipeline.js"></script>
+  <script src="js/visualizer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

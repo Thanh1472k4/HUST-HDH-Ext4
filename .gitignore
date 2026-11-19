@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Linux compiled binaries
+BTL/ext4_inspect
+*.o
+
+# OS generated & large external files
+yande.re*
+Thumbs.db
+.DS_Store
+
+# IDE personal settings
+.vscode/
