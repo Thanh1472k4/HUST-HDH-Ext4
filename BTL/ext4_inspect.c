@@ -4,7 +4,7 @@
  * ĐỀ TÀI 16: TÌM HIỂU EXT3/EXT4 TRÊN LINUX & XÂY DỰNG CHƯƠNG TRÌNH DÙNG API
  *            ĐỌC METADATA, INODE/EXTENT VÀ VỊ TRÍ BLOCK CỦA FILE.
  * ============================================================================
- * Sinh viên thực hiện: Nguyễn Thế Anh
+ * Sinh viên thực hiện: Lưu Thế Anh & Đỗ Minh Quân
  * Mã nguồn: ext4_inspect.c
  * Các System API cốt lõi sử dụng:
  *   1. statx() / stat()            : Đọc Inode, Metadata, Timestamps (btime)

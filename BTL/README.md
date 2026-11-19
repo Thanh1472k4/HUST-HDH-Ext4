@@ -2,7 +2,7 @@
 ## TÌM HIỂU EXT3/EXT4 TRÊN LINUX VÀ TRÍCH XUẤT INODE/EXTENT BẰNG SYSTEM API
 
 - **Môn học**: Hệ điều hành (BTL Đề tài 16 - Độ khó 5/5)
-- **Sinh viên**: Nguyễn Thế Anh
+- **Sinh viên**: Lưu Thế Anh & Đỗ Minh Quân
 - **Cơ sở đào tạo**: Đại học Bách Khoa Hà Nội
 
 ---
