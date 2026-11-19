@@ -81,6 +81,6 @@ python run.py
 ---
 
 ## 👥 Thành viên Thực hiện
-- **Sinh viên:** Nguyễn Thế Anh & Nhóm bài tập lớn
+- **Sinh viên:** Lưu Thế Anh & Đỗ Minh Quân
 - **Đại học:** Đại học Bách Khoa Hà Nội
 - **Học kỳ:** 2026.1
